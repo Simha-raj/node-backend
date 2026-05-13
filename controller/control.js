@@ -1,10 +1,10 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const bodyparser = require('bodyparser');
+const bodyparser = require('body-parser');
 const axios = require('axios');
 
 //Mongodb connection
-mongoose.connect("mongodb://localhost:27017/TempDatabase?directConnection=true",{})
+mongoose.connect(process.env.MONGO_URI,{})
 
 //Schema Definition
 const dataSchema = new mongoose.Schema({
