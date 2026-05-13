@@ -1,6 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const bodyparser = require('body-parser');
+const bodyParser = require('body-parser');
 const axios = require('axios');
 
 //Mongodb connection
