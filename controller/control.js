@@ -1,72 +1,99 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const bodyParser = require('body-parser');
-const axios = require('axios');
+const mongoose = require("mongoose");
+const axios = require("axios");
 
-//Mongodb connection
-mongoose.connect(process.env.MONGO_URI,{})
+// -------------------- MongoDB Connection --------------------
 
-//Schema Definition
-const dataSchema = new mongoose.Schema({
+const connectDB = async () => {
+  try {
+    if (mongoose.connection.readyState >= 1) {
+      return;
+    }
+
+    await mongoose.connect(process.env.MONGO_URI);
+
+    console.log("MongoDB Connected");
+  } catch (err) {
+    console.error("MongoDB Connection Error:", err);
+    throw err;
+  }
+};
+
+// -------------------- Schema Definition --------------------
+
+const dataSchema = new mongoose.Schema(
+  {
     code: String,
     rate: Number,
     volume: Number,
     cap: Number,
-})
+  },
+  {
+    timestamps: true,
+  }
+);
 
-const Livedata = mongoose.model('Livedata',dataSchema);
+const Livedata = mongoose.models.Livedata || mongoose.model("Livedata", dataSchema);
 
-//Api for fetching data from liveCoinWatch
+// -------------------- API --------------------
 
 const fetchData = async (req, res) => {
+  try {
+    // Connect DB
+    await connectDB();
 
-    try {
+    const headers = {
+      "content-type": "application/json",
+      accept: "application/json",
+   "x-api-key": "73f7a2d8-1f0c-4645-8e7f-99892a2a5162",
+    };
 
-        const headers = {
-            "content-type": "application/json",
-            "x-api-key": "73f7a2d8-1f0c-4645-8e7f-99892a2a5162",
-            "accept": "application/json"
-        }
+    // Fetch data from LiveCoinWatch
+    const response = await axios.post(
+      "https://api.livecoinwatch.com/coins/list",
+      {
+        currency: "USD",
+        sort: "rank",
+        order: "ascending",
+        offset: 0,
+        limit: 50,
+        meta: true,
+      },
+      { headers }
+    );
 
-        const response = await axios.post("https://api.livecoinwatch.com/coins/list", {
-            "currency": "USD",
-            "sort": "rank",
-            "order": "ascending",
-            "offset": 0,
-            "limit": 50,
-            "meta": true
-        }, { headers });
+    // Map response
+    const mappedResponse = response.data.map((item) => ({
+      code: item.code,
+      rate: item.rate,
+      volume: item.volume,
+      cap: item.cap,
+    }));
 
-        const mappedResponse = response.data.map((resp) => ({
-            "code": resp.code,
-            "rate": resp.rate,
-            "volume": resp.volume,
-            "cap": resp.cap,
-        }));
+    // Insert into MongoDB
+    await Livedata.insertMany(mappedResponse);
 
-        await insertData(mappedResponse);
+    // Get latest records
+    const resp = await Livedata.find({
+      code: req.query.code,
+    })
+      .sort({ createdAt: -1 })
+      .limit(20);
 
-        async function insertData(data) {
-            for (const item of data) {
-                await new Livedata({ ...item }).save();
-            }
+    // Response
+    res.status(200).json({
+      success: true,
+      data: resp,
+    });
+  } catch (err) {
+    console.error("Fetch Data Error:", err);
 
-        }
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+};
 
-        const resp = await Livedata.find({ "code": req.query.code }).sort({ _id: -1 }).limit(20);
-
-        const result = resp.map((resp) => ({
-            "code": resp.code,
-            "rate": resp.rate,
-            "volume": resp.volume,
-            "cap": resp.cap,
-        }));
-
-        res.status(200).json({ data: [...result,] })
-
-    } catch (err) {
-        res.status(500).json({ error: `Failed to fetch data ${err}` });
-    }
-}
-
-module.exports.fetchData = fetchData;
+module.exports = {
+  fetchData,
+};
